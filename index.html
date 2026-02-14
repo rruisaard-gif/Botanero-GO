@@ -38,7 +38,8 @@
     window.__fsColl    = collection;
     window.__fsGetDocs = getDocs;
     window.__fbReady   = true;
-    window.dispatchEvent(new Event("firebase-ready"));
+    // Dispatch after a small delay to ensure Babel/React has time to register listeners
+    setTimeout(() => window.dispatchEvent(new Event("firebase-ready")), 100);
   </script>
 
   <style>
@@ -83,8 +84,20 @@
           );
           cleanOldVotes(today);
         }
-        if (window.__fbReady) subscribe();
-        else window.addEventListener("firebase-ready", subscribe, {once:true});
+        // Check immediately in case firebase is already ready
+        if (window.__fbReady && window.__db) {
+          subscribe();
+        } else {
+          window.addEventListener("firebase-ready", subscribe, {once:true});
+          // Also poll as fallback
+          const poll = setInterval(() => {
+            if (window.__fbReady && window.__db) {
+              clearInterval(poll);
+              subscribe();
+            }
+          }, 200);
+          return () => { clearInterval(poll); unsub && unsub(); };
+        }
         return () => unsub && unsub();
       }, []);
 
