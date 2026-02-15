@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>🍸 Botanero? TEST</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+
+  <!-- MOCK Firebase — simulates Firestore in memory -->
+  <script>
+    (function() {
+      let _data = {};
+      let _listeners = {};
+
+      window.__fbReady = true;
+      window.__db = "mock";
+      window.__fsDoc = (db, coll, id) => ({ coll, id });
+      window.__fsColl = (db, coll) => ({ coll });
+      window.__fsGetDocs = async (ref) => ({ forEach: () => {} });
+      window.__fsDel = async () => {};
+
+      window.__fsSet = async (ref, data) => {
+        const key = ref.coll + "/" + ref.id;
+        _data[key] = JSON.parse(JSON.stringify(data));
+        if (_listeners[key]) {
+          _listeners[key].forEach(cb => cb({
+            exists: () => true,
+            data: () => _data[key]
+          }));
+        }
+      };
+
+      window.__fsSnap = (ref, cb, errCb) => {
+        const key = ref.coll + "/" + ref.id;
+        if (!_listeners[key]) _listeners[key] = [];
+        _listeners[key].push(cb);
+        // Immediately call with current data (or empty)
+        if (_data[key]) {
+          cb({ exists: () => true, data: () => _data[key] });
+        } else {
+          cb({ exists: () => false, data: () => null });
+        }
+        return () => { _listeners[key] = _listeners[key].filter(f => f !== cb); };
+      };
+
+      console.log("✅ Mock Firebase ready");
+    })();
+  </script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #root { height: 100%; }
+    body { background: #1e6b3a; font-family: 'DM Sans', sans-serif; }
+    @keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes float  { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+    @keyframes pop    { 0%{transform:scale(.9);opacity:0} 100%{transform:scale(1);opacity:1} }
+    @keyframes shake  { 0%,100%{transform:rotate(0)} 25%{transform:rotate(-8deg)} 75%{transform:rotate(8deg)} }
+    @keyframes blink  { 0%,100%{opacity:1} 50%{opacity:.2} }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+    const USERS = ["Robert", "Nino", "Zjevaun", "Coen"];
+    const LOGO = "https://ripsnorter.nl/cdn/shop/files/Ripsnorter_Logo_White_Outline.png?v=1683709923";
+
+    function getTodayKey() {
+      const d = new Date();
+      return d.getFullYear() + "-" + (d.getMonth()+1) + "-" + d.getDate();
+    }
+
+    function useVotes() {
+      const [votes, setVotes] = useState({});
+      const unsubRef = useRef(null);
+
+      useEffect(() => {
+        let interval = setInterval(() => {
+          if (window.__fbReady && window.__db) {
+            clearInterval(interval);
+            const today = getTodayKey();
+            if (unsubRef.current) unsubRef.current();
+            unsubRef.current = window.__fsSnap(
+              window.__fsDoc(window.__db, "botanero", today),
+              snap => setVotes(snap.exists() ? (snap.data().votes || {}) : {}),
+              err => console.warn("Firestore:", err)
+            );
+          }
+        }, 50);
+        return () => { clearInterval(interval); if (unsubRef.current) unsubRef.current(); };
+      }, []);
+
+      async function castVote(user, choice) {
+        const today = getTodayKey();
+        const newVotes = choice === null ? {...votes} : {...votes, [user]: choice};
+        if (choice === null) delete newVotes[user];
+        setVotes(newVotes);
+        try { await window.__fsSet(window.__fsDoc(window.__db, "botanero", today), { votes: newVotes, date: today }); }
+        catch(e) { console.warn(e); }
+      }
+      return { votes, castVote };
+    }
+
+    function Header({ dark }) {
+      return (
+        <div style={{textAlign:"center", padding:"40px 24px 16px"}}>
+          <img src={LOGO} alt="Ripsnorter" style={{width:150, filter:"drop-shadow(0 4px 16px rgba(0,0,0,.4))", opacity: dark ? .7 : 1}}
+            onError={e => { e.target.replaceWith(Object.assign(document.createElement('div'), {textContent:'🍸', style:'font-size:60px;text-align:center'})); }} />
+        </div>
+      );
+    }
+
+    function WinnieSVG({ size=44 }) {
+      return (
+        <svg width={size} height={size} viewBox="0 0 100 100" style={{flexShrink:0}}>
+          <ellipse cx="50" cy="65" rx="28" ry="24" fill="#E8923A"/>
+          <circle cx="50" cy="38" r="22" fill="#F4A820"/>
+          <circle cx="28" cy="20" r="10" fill="#F4A820"/>
+          <circle cx="72" cy="20" r="10" fill="#F4A820"/>
+          <circle cx="28" cy="20" r="6" fill="#E8923A"/>
+          <circle cx="72" cy="20" r="6" fill="#E8923A"/>
+          <circle cx="42" cy="35" r="4" fill="#1a0a00"/>
+          <circle cx="58" cy="35" r="4" fill="#1a0a00"/>
+          <circle cx="43" cy="33.5" r="1.5" fill="white"/>
+          <circle cx="59" cy="33.5" r="1.5" fill="white"/>
+          <ellipse cx="50" cy="42" rx="5" ry="3.5" fill="#c0683a"/>
+          <path d="M43 47 Q50 53 57 47" fill="none" stroke="#1a0a00" strokeWidth="2.5" strokeLinecap="round"/>
+          <rect x="38" y="73" width="24" height="20" rx="3" fill="#F9D342"/>
+          <rect x="38" y="73" width="24" height="7" rx="3" fill="#E8923A"/>
+          <text x="50" y="90" textAnchor="middle" fontSize="8" fontWeight="bold" fill="#6B3A1F">POT</text>
+          <path d="M22 58 Q30 68 38 76" fill="none" stroke="#F4A820" strokeWidth="6" strokeLinecap="round"/>
+          <path d="M78 58 Q70 68 62 76" fill="none" stroke="#F4A820" strokeWidth="6" strokeLinecap="round"/>
+        </svg>
+      );
+    }
+
+    function PickUserScreen({ onPick }) {
+      return (
+        <div style={S.page}>
+          <Header/>
+          <div style={{flex:1, display:"flex", flexDirection:"column", alignItems:"center", padding:"8px 24px 40px", animation:"fadeUp .4s ease both"}}>
+            <div style={S.card}>
+              <div style={{fontWeight:800, fontSize:12, color:"#aaa", letterSpacing:2, textTransform:"uppercase", marginBottom:16}}>Who are you?</div>
+              <div style={{display:"flex", flexDirection:"column", gap:10}}>
+                {USERS.map((u, i) => (
+                  <button key={u} onClick={() => onPick(u)}
+                    style={{...S.userBtn, animation:"fadeUp .4s ease " + (i*0.08) + "s both"}}>
+                    <span>{u}</span><span style={{opacity:.3}}>→</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function VoteScreen({ user, onVote }) {
+      return (
+        <div style={S.page}>
+          <Header/>
+          <div style={{flex:1, display:"flex", flexDirection:"column", alignItems:"center", padding:"8px 24px 40px", maxWidth:420, margin:"0 auto", width:"100%", animation:"fadeUp .35s ease both"}}>
+            <div style={S.card}>
+              <div style={{fontWeight:900, fontSize:21, color:"#111", marginBottom:4, lineHeight:1.2}}>Are you in for Botanero today? 🍸</div>
+              <div style={{fontSize:14, color:"#aaa", marginBottom:24}}>Hey {user}, what do you say?</div>
+              <button onClick={() => onVote(user, "yes")} style={S.btnYes}>
+                <span style={{fontSize:30}}>🍸</span>
+                <div style={{textAlign:"left"}}><div style={{fontWeight:900, fontSize:17}}>Yes, I'm in!</div><div style={{fontSize:12, opacity:.7}}>Let's get those cocktails</div></div>
+              </button>
+              <button onClick={() => onVote(user, "no")} style={S.btnNo}>
+                <span style={{fontSize:30}}>😴</span>
+                <div style={{textAlign:"left"}}><div style={{fontWeight:900, fontSize:17}}>Nah, not tonight</div><div style={{fontSize:12, opacity:.6}}>Early night for me</div></div>
+              </button>
+              <button onClick={() => onVote(user, "honey")} style={S.btnHoney}>
+                <WinnieSVG size={44}/>
+                <div style={{textAlign:"left"}}><div style={{fontWeight:900, fontSize:17, color:"#3d1f00"}}>I need the Honey 🍯</div><div style={{fontSize:12, color:"#7a4a10"}}>Only if there's something sweet</div></div>
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function ResultsScreen({ user, votes, onVote }) {
+      const yes    = USERS.filter(u => votes[u] === "yes");
+      const no     = USERS.filter(u => votes[u] === "no");
+      const honey  = USERS.filter(u => votes[u] === "honey");
+      const pending = USERS.filter(u => !votes[u]);
+      const allVoted = pending.length === 0;
+      const goCount  = yes.length + honey.length;
+
+      if (votes[user] === "honey") {
+        return (
+          <div style={{...S.page, background:"#2a1000"}}>
+            <Header dark/>
+            <div style={{flex:1, display:"flex", flexDirection:"column", alignItems:"center", padding:"0 24px 40px", animation:"fadeUp .35s ease both"}}>
+              <div style={{textAlign:"center", marginBottom:24}}>
+                <div style={{fontSize:80, animation:"shake 1.5s ease infinite", display:"inline-block"}}>🍯</div>
+                <div style={{fontWeight:900, fontSize:32, color:"#F9D342", lineHeight:1.1, marginTop:12}}>Call the Honeyman!</div>
+                <div style={{fontSize:14, color:"#c07020", marginTop:8}}>{user} needs their honey first...</div>
+              </div>
+              <div style={{...S.card, background:"rgba(255,255,255,.06)", border:"none", width:"100%"}}>
+                {USERS.map(u => (
+                  <div key={u} style={{display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 0", borderBottom:"1px solid rgba(255,255,255,.06)"}}>
+                    <span style={{fontWeight:800, fontSize:16, color: u===user?"#F9D342":"#bbb"}}>{u}</span>
+                    <span style={{fontSize:22}}>{votes[u]==="yes"?"🍸":votes[u]==="no"?"😴":votes[u]==="honey"?"🍯":"⏳"}</span>
+                  </div>
+                ))}
+              </div>
+              <button style={{...S.changeBtn, color:"#F9D342", borderColor:"rgba(249,211,66,.3)", marginTop:8}} onClick={() => onVote(user, null)}>← Change my vote</button>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div style={S.page}>
+          <Header/>
+          <div style={{flex:1, display:"flex", flexDirection:"column", alignItems:"center", padding:"8px 24px 40px", maxWidth:420, margin:"0 auto", width:"100%", animation:"fadeUp .35s ease both"}}>
+            {allVoted && (
+              <div style={{...S.verdictBanner, background: goCount>=3?"#fff":goCount===2?"rgba(255,255,255,.12)":"rgba(0,0,0,.25)", animation:"pop .4s ease both"}}>
+                <div style={{fontSize:34, marginBottom:6}}>{goCount>=3?"🎉":goCount===2?"🤔":"💤"}</div>
+                <div style={{fontWeight:900, fontSize:22, color: goCount>=3?"#1e6b3a":"#fff"}}>{goCount>=3?"WE'RE GOING!":goCount===2?"Maybe...":"Not tonight"}</div>
+                <div style={{fontSize:13, marginTop:4, color: goCount>=3?"#2d8a4e":"rgba(255,255,255,.5)"}}>{yes.length} yes · {honey.length} honey · {no.length} out</div>
+              </div>
+            )}
+            {!allVoted && (
+              <div style={S.waitingBanner}>
+                <span style={{animation:"blink 1.2s ease infinite", display:"inline-block", color:"#7ecfb3"}}>●</span>
+                <span style={{fontSize:13, color:"rgba(255,255,255,.55)", fontWeight:700}}>Waiting for {pending.join(", ")}...</span>
+              </div>
+            )}
+            <div style={S.card}>
+              <div style={{fontWeight:800, fontSize:11, color:"#aaa", letterSpacing:2, textTransform:"uppercase", marginBottom:12}}>Tonight's crew</div>
+              {USERS.map(u => {
+                const v = votes[u], isYou = u === user;
+                return (
+                  <div key={u} style={{display:"flex", alignItems:"center", gap:12, padding:"12px 0", borderBottom:"1px solid #f0f0f0"}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:800, fontSize:16, color:"#111"}}>{u} {isYou && <span style={{fontSize:11, color:"#1e6b3a", fontWeight:700}}>(you)</span>}</div>
+                      <div style={{fontSize:12, fontWeight:700, marginTop:2, color: v==="yes"?"#1e6b3a":v==="no"?"#bbb":v==="honey"?"#c07020":"#ddd"}}>
+                        {v==="yes"?"In for tonight!":v==="no"?"Not tonight":v==="honey"?"Needs the honey 🍯":"Deciding..."}
+                      </div>
+                    </div>
+                    <span style={{fontSize:26}}>{v==="yes"?"🍸":v==="no"?"😴":v==="honey"?"🍯":"⏳"}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <button style={S.changeBtn} onClick={() => onVote(user, null)}>← Change my vote</button>
+          </div>
+        </div>
+      );
+    }
+
+    function App() {
+      const [user, setUser] = useState(null);
+      const { votes, castVote } = useVotes();
+      if (!user) return <PickUserScreen onPick={setUser}/>;
+      if (votes[user]) return <ResultsScreen user={user} votes={votes} onVote={castVote}/>;
+      return <VoteScreen user={user} votes={votes} onVote={castVote}/>;
+    }
+
+    const S = {
+      page:          { minHeight:"100vh", background:"#1e6b3a", display:"flex", flexDirection:"column" },
+      card:          { background:"#fff", borderRadius:20, padding:"20px", boxShadow:"0 8px 40px rgba(0,0,0,.2)", width:"100%", marginBottom:12 },
+      userBtn:       { display:"flex", alignItems:"center", justifyContent:"space-between", background:"#f5f5f5", border:"none", borderRadius:12, padding:"16px 18px", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", color:"#111", fontWeight:800, fontSize:17, width:"100%" },
+      btnYes:        { display:"flex", alignItems:"center", gap:14, width:"100%", marginBottom:10, background:"#1e6b3a", border:"none", borderRadius:14, padding:"16px 20px", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", color:"#fff", boxShadow:"0 4px 20px rgba(0,0,0,.2)" },
+      btnNo:         { display:"flex", alignItems:"center", gap:14, width:"100%", marginBottom:10, background:"#111", border:"none", borderRadius:14, padding:"16px 20px", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", color:"#fff", boxShadow:"0 4px 20px rgba(0,0,0,.2)" },
+      btnHoney:      { display:"flex", alignItems:"center", gap:14, width:"100%", background:"linear-gradient(135deg,#F9D342,#F4A820)", border:"none", borderRadius:14, padding:"14px 20px", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 20px rgba(0,0,0,.15)" },
+      verdictBanner: { width:"100%", borderRadius:16, padding:"20px", textAlign:"center", marginBottom:12, border:"1px solid rgba(255,255,255,.15)" },
+      waitingBanner: { width:"100%", background:"rgba(0,0,0,.2)", borderRadius:12, padding:"12px 16px", marginBottom:12, display:"flex", alignItems:"center", gap:10, border:"1px solid rgba(255,255,255,.08)" },
+      changeBtn:     { background:"transparent", color:"rgba(255,255,255,.45)", border:"1px solid rgba(255,255,255,.15)", borderRadius:10, padding:"12px 20px", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", fontSize:13, fontWeight:700, width:"100%", marginTop:4 },
+    };
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+  </script>
+</body>
+</html>
